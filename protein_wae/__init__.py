@@ -6,11 +6,11 @@ with support for both causal autoregressive and permutation language model decod
 """
 
 __version__ = "0.1.0"
-__author__ = "Adam Kuhn"
+__author__ = "Your Name"
 
 from .tokenizer import Tokenizer
 from .models import WassersteinAutoencoder, ProteinEncoder, CausalAutoregressiveDecoder, PermutationDecoder
-from .data import ProteinDataset
+from .data import ProteinDataset, create_data_loaders
 from .training import Trainer
 from .sampling import Sampler
 
@@ -21,6 +21,7 @@ __all__ = [
     "CausalAutoregressiveDecoder",
     "PermutationDecoder",
     "ProteinDataset",
+    "create_data_loaders",
     "Trainer",
     "Sampler"
 ]
