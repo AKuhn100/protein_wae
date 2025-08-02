@@ -1,0 +1,48 @@
+{
+    "data": {
+      "fasta_path": "/path/to/your/proteins.fasta",
+      "min_seq_len": 305,
+      "max_seq_len": 305,
+      "val_fraction": 0.1,
+      "batch_size": 64,
+      "num_workers": 4,
+      "seed": 42
+    },
+    "model": {
+      "latent_dim": 512,
+      "encoder_embed_dim": 256,
+      "encoder_hidden_dim": 512,
+      "encoder_num_layers": 6,
+      "encoder_num_heads": 8,
+      "decoder_type": "causal",
+      "decoder_hidden_dim": 512,
+      "decoder_num_heads": 8,
+      "decoder_num_layers": 4,
+      "dropout": 0.1
+    },
+    "training": {
+      "total_epochs": 65,
+      "learning_rate": 0.0001,
+      "gradient_clip": 1.0,
+      "deterministic_epochs": 10,
+      "mmd_ramp_epochs": 5,
+      "mmd_full_epochs": 50,
+      "mmd_weight": 10.0,
+      "mmd_kernel_bandwidth": 1.0,
+      "use_amp": true,
+      "scheduler_patience": 15,
+      "scheduler_factor": 0.5,
+      "checkpoint_dir": "./checkpoints",
+      "save_best": true,
+      "save_last": true,
+      "log_interval": 100,
+      "analysis_interval": 20
+    },
+    "sampling": {
+      "num_samples": 10000,
+      "batch_size": 128,
+      "sampling_std": 1.0,
+      "temperature": 1.0,
+      "output_path": "generated_samples.fasta"
+    }
+  }
