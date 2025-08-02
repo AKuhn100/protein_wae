@@ -4,7 +4,7 @@ Main trainer class for WAE models.
 
 import json
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn as nn

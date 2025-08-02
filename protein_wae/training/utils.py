@@ -2,7 +2,7 @@
 Training utilities and helper functions.
 """
 
-from typing import Tuple, Dict, List
+from typing import Tuple, Dict, List, Optional
 import numpy as np
 
 import torch
