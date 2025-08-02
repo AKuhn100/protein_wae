@@ -27,8 +27,13 @@ def setup_device() -> Tuple[torch.device, int, bool]:
         print(f"   ✅ CUDA available with {num_gpus} GPU(s)")
         device = torch.device("cuda")
         use_amp = True
+    elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
+        print("   ✅ Apple Silicon GPU (MPS) available")
+        device = torch.device("mps")
+        use_amp = False  # AMP not fully supported on MPS yet
+        num_gpus = 1
     else:
-        print("   ℹ️ CUDA not available, using CPU")
+        print("   ℹ️ No GPU available, using CPU")
         device = torch.device("cpu")
         use_amp = False
         num_gpus = 0

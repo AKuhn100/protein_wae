@@ -76,8 +76,7 @@ class Trainer:
             self.optimizer,
             mode='min',
             factor=config.training.scheduler_factor,
-            patience=config.training.scheduler_patience,
-            verbose=True
+            patience=config.training.scheduler_patience
         )
         
         # Setup AMP scaler
