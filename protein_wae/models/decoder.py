@@ -8,11 +8,11 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .layers import PositionalEncoding, LatentProjection
+from .layers import PositionalEncoding
 
 
 class CausalAutoregressiveDecoder(nn.Module):
-    """Causal autoregressive decoder that generates sequences token by token."""
+    """Causal autoregressive decoder with improved latent conditioning."""
     
     def __init__(self,
                  d_lat: int,
@@ -46,11 +46,21 @@ class CausalAutoregressiveDecoder(nn.Module):
         self.token_emb = nn.Embedding(vocab_size, d_model, padding_idx=pad_idx)
         self.pos_encoder = PositionalEncoding(d_model, max_len)
         
-        # Project latent code to initial hidden state
-        self.latent_projection = LatentProjection(d_lat, d_model, num_layers=2, dropout=dropout)
+        # Latent conditioning layers
+        # Option 1: Additive conditioning (simple and effective)
+        self.latent_projection = nn.Sequential(
+            nn.Linear(d_lat, d_model * 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model * 2, d_model)
+        )
         
-        # Transformer decoder with causal masking
-        decoder_layer = nn.TransformerDecoderLayer(
+        # Option 2: FiLM-style modulation (commented out, but available)
+        # self.latent_to_scale = nn.Linear(d_lat, d_model)
+        # self.latent_to_bias = nn.Linear(d_lat, d_model)
+        
+        # Use transformer encoder layers (we don't need cross-attention)
+        encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
             nhead=n_heads,
             dim_feedforward=d_model * 4,
@@ -59,7 +69,7 @@ class CausalAutoregressiveDecoder(nn.Module):
             batch_first=True,
             norm_first=True
         )
-        self.transformer_decoder = nn.TransformerDecoder(decoder_layer, num_layers=n_layers)
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
         
         # Output projection
         self.output_projection = nn.Sequential(
@@ -68,9 +78,6 @@ class CausalAutoregressiveDecoder(nn.Module):
             nn.Dropout(dropout),
             nn.Linear(d_model // 2, vocab_size)
         )
-        
-        # Layer normalization
-        self.norm = nn.LayerNorm(d_model)
         
         # Create causal mask
         self.register_buffer("causal_mask", self._generate_causal_mask(max_len))
@@ -100,30 +107,35 @@ class CausalAutoregressiveDecoder(nn.Module):
         seq_len = decoder_input.size(1)
         
         # Get token embeddings
-        token_emb = self.token_emb(decoder_input)  # (B, L, D)
-        token_emb = self.pos_encoder(token_emb)
+        h = self.token_emb(decoder_input)  # (B, L, D)
+        h = self.pos_encoder(h)
         
-        # Project latent code to memory
-        memory = self.latent_projection(z)  # (B, D)
-        memory = memory.unsqueeze(1).expand(-1, seq_len, -1)  # (B, L, D)
+        # Apply latent conditioning
+        # Method 1: Additive conditioning (broadcast latent to all positions)
+        latent_emb = self.latent_projection(z).unsqueeze(1)  # (B, 1, D)
+        h = h + latent_emb  # (B, L, D)
         
-        # Create padding mask
+        # Method 2: FiLM-style modulation (alternative approach)
+        # scale = self.latent_to_scale(z).unsqueeze(1).sigmoid() * 2  # (B, 1, D)
+        # bias = self.latent_to_bias(z).unsqueeze(1)  # (B, 1, D)
+        # h = h * scale + bias
+        
+        # Create masks
+        causal_mask = self.causal_mask[:seq_len, :seq_len].to(dtype=h.dtype)
         if target_lengths is not None:
             padding_mask = torch.arange(seq_len, device=decoder_input.device).unsqueeze(0) >= target_lengths.unsqueeze(1)
         else:
             padding_mask = (decoder_input == self.pad_idx)
         
-        # Apply transformer decoder with causal mask
-        causal_mask = self.causal_mask[:seq_len, :seq_len]
-        hidden = self.transformer_decoder(
-            tgt=token_emb,
-            memory=memory,
-            tgt_mask=causal_mask,
-            tgt_key_padding_mask=padding_mask
+        # Apply transformer with causal masking
+        h = self.transformer(
+            src=h,
+            mask=causal_mask,
+            src_key_padding_mask=padding_mask
         )
         
         # Project to vocabulary
-        logits = self.output_projection(hidden)
+        logits = self.output_projection(h)
         
         return logits
     
@@ -178,7 +190,7 @@ class CausalAutoregressiveDecoder(nn.Module):
 
 
 class PermutationDecoder(nn.Module):
-    """Permutation language model decoder for non-autoregressive generation."""
+    """Permutation language model decoder with improved latent conditioning."""
     
     def __init__(self,
                  d_lat: int,
@@ -215,11 +227,16 @@ class PermutationDecoder(nn.Module):
         self.token_emb = nn.Embedding(vocab_size, d_model, padding_idx=pad_idx)
         self.pos_encoder = PositionalEncoding(d_model, max_len)
         
-        # Project latent code
-        self.latent_projection = nn.Linear(d_lat, d_model)
+        # Latent conditioning (same as causal decoder for consistency)
+        self.latent_projection = nn.Sequential(
+            nn.Linear(d_lat, d_model * 2),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(d_model * 2, d_model)
+        )
         
         # Transformer encoder (bidirectional for PLM)
-        decoder_layer = nn.TransformerEncoderLayer(
+        encoder_layer = nn.TransformerEncoderLayer(
             d_model=d_model,
             nhead=n_heads,
             dim_feedforward=d_model * 4,
@@ -228,7 +245,7 @@ class PermutationDecoder(nn.Module):
             batch_first=True,
             norm_first=True
         )
-        self.transformer = nn.TransformerEncoder(decoder_layer, num_layers=n_layers)
+        self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=n_layers)
         
         # Output projection
         self.output_projection = nn.Linear(d_model, vocab_size)
@@ -248,14 +265,13 @@ class PermutationDecoder(nn.Module):
         Returns:
             Logits for token prediction (batch_size, seq_len, vocab_size)
         """
-        # Project latent code
-        latent_cond = self.latent_projection(z).unsqueeze(1)  # (B, 1, D)
-        
         # Get token embeddings
-        token_emb = self.token_emb(decoder_input)  # (B, L, D)
+        h = self.token_emb(decoder_input)  # (B, L, D)
+        h = self.pos_encoder(h)
         
-        # Add positional encoding and latent conditioning
-        h = self.pos_encoder(token_emb) + latent_cond
+        # Apply latent conditioning (additive)
+        latent_emb = self.latent_projection(z).unsqueeze(1)  # (B, 1, D)
+        h = h + latent_emb  # Broadcast to all positions
         
         # Create padding mask if needed
         if target_lengths is not None:
@@ -264,11 +280,11 @@ class PermutationDecoder(nn.Module):
         else:
             padding_mask = (decoder_input == self.pad_idx)
         
-        # Apply transformer
-        hidden = self.transformer(src=h, src_key_padding_mask=padding_mask)
+        # Apply transformer (no causal mask for PLM)
+        h = self.transformer(src=h, src_key_padding_mask=padding_mask)
         
         # Project to vocabulary
-        logits = self.output_projection(hidden)
+        logits = self.output_projection(h)
         
         return logits
     
