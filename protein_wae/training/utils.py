@@ -113,7 +113,9 @@ def analyze_latent_space(model: nn.Module,
     """
     print(f"\n🔬 Latent Analysis - Epoch {epoch}")
     
-    model.eval()
+    # Access the actual model if it's wrapped in DataParallel
+    actual_model = model.module if hasattr(model, 'module') else model
+    actual_model.eval()
     
     phase, _, _ = get_training_phase(epoch, config)
     deterministic = (phase == "deterministic")
@@ -131,7 +133,7 @@ def analyze_latent_space(model: nn.Module,
             # Move batch to device
             batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in batch.items()}
             
-            # Forward pass
+            # Forward pass using the main model object
             logits, z = model(batch, deterministic=deterministic)
             predicted_tokens = torch.argmax(logits, dim=-1)
             
@@ -139,7 +141,8 @@ def analyze_latent_space(model: nn.Module,
             
             # Test generation for first batch
             if i == 0 and config.model.decoder_type == "causal":
-                generated = model.decoder.generate(
+                # FIX: Use 'actual_model' to access the decoder
+                generated = actual_model.decoder.generate(
                     z[:num_examples],
                     max_length=batch["decoder_input"].size(1),
                     bos_idx=tokenizer.bos_idx,
@@ -211,7 +214,8 @@ def analyze_latent_space(model: nn.Module,
             orig, recon, _, acc = ex
             print(f"   {i+1}. {acc:.3f}: {orig[:30]}... → {recon[:30]}...")
     
-    model.train()
+    # FIX: Use 'actual_model' to set mode back to train
+    actual_model.train()
     return mean_acc
 
 
