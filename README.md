@@ -19,7 +19,7 @@ A PyTorch implementation of Wasserstein Autoencoders for protein sequence genera
 ```bash
 git clone https://github.com/AKuhn100/protein-wae.git
 cd protein-wae
-pip install -e .
+pip install .
 ```
 
 ### Requirements
