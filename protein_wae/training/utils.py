@@ -75,9 +75,12 @@ def count_parameters(model: nn.Module) -> Dict[str, int]:
     Returns:
         Dictionary with parameter counts
     """
-    total = sum(p.numel() for p in model.parameters())
-    encoder = sum(p.numel() for p in model.encoder.parameters())
-    decoder = sum(p.numel() for p in model.decoder.parameters())
+    # Access the actual model if it's wrapped in DataParallel
+    actual_model = model.module if hasattr(model, 'module') else model
+
+    total = sum(p.numel() for p in actual_model.parameters())
+    encoder = sum(p.numel() for p in actual_model.encoder.parameters())
+    decoder = sum(p.numel() for p in actual_model.decoder.parameters())
     
     return {
         "total": total,
